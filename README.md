@@ -51,6 +51,26 @@ go mod tidy
 go build -o pg-rmq-publisher main.go
 ```
 
+### Pull from Docker Hub
+
+```bash
+# Pull the latest image
+docker pull cobeo2004/pg-rmq-publisher:latest
+
+# Run the container
+docker run -d \
+  --name pg-rmq-publisher \
+  -e PG_CONNECTION_STRING="postgresql://postgres:postgres@host.docker.internal:5432/postgres?sslmode=disable" \
+  -e PG_EVENTS="notification-actions,device-actions,recording-actions" \
+  -e RABBITMQ_URL="amqp://user:password@host.docker.internal:5672/" \
+  -e RABBITMQ_EXCHANGE="pg_events" \
+  -e RABBITMQ_EXCHANGE_TYPE="topic" \
+  -e RABBITMQ_EXCHANGE_DURABLE="true" \
+  cobeo2004/pg-rmq-publisher:latest
+```
+
+**Note**: Use `host.docker.internal` to access services running on the host machine from within Docker containers (works on Docker Desktop for Mac/Windows). For Linux, use `--network="host"` or connect to the actual host IP.
+
 ## Configuration
 
 Configuration follows this priority order: **CLI flags > Environment variables > Defaults**
@@ -89,16 +109,16 @@ RABBITMQ_WORKER_POOL=5  # Optional: auto-detects based on CPU if not set
 
 ### Configuration Options
 
-| Flag | Environment Variable | Default | Description |
-|------|---------------------|---------|-------------|
-| `--pg-conn`, `-p` | `PG_CONNECTION_STRING` | *required* | PostgreSQL connection string |
-| `--pg-events`, `-e` | `PG_EVENTS` | *required* | Comma-separated list of PostgreSQL events to listen to |
-| `--pg-workers` | `PG_WORKER_POOL` | `auto` | Number of PostgreSQL notification handler workers (0=auto) |
-| `--rmq-url`, `-r` | `RABBITMQ_URL` | *required* | RabbitMQ connection URL |
-| `--rmq-exchange`, `-x` | `RABBITMQ_EXCHANGE` | *required* | RabbitMQ exchange name |
-| `--rmq-exchange-type`, `-t` | `RABBITMQ_EXCHANGE_TYPE` | `topic` | Exchange type (direct, fanout, topic, headers) |
-| `--rmq-exchange-durable` | `RABBITMQ_EXCHANGE_DURABLE` | `false` | Make exchange durable (survives broker restart) |
-| `--rmq-workers` | `RABBITMQ_WORKER_POOL` | `auto` | Number of RabbitMQ publisher workers (0=auto) |
+| Flag                        | Environment Variable        | Default    | Description                                                |
+| --------------------------- | --------------------------- | ---------- | ---------------------------------------------------------- |
+| `--pg-conn`, `-p`           | `PG_CONNECTION_STRING`      | _required_ | PostgreSQL connection string                               |
+| `--pg-events`, `-e`         | `PG_EVENTS`                 | _required_ | Comma-separated list of PostgreSQL events to listen to     |
+| `--pg-workers`              | `PG_WORKER_POOL`            | `auto`     | Number of PostgreSQL notification handler workers (0=auto) |
+| `--rmq-url`, `-r`           | `RABBITMQ_URL`              | _required_ | RabbitMQ connection URL                                    |
+| `--rmq-exchange`, `-x`      | `RABBITMQ_EXCHANGE`         | _required_ | RabbitMQ exchange name                                     |
+| `--rmq-exchange-type`, `-t` | `RABBITMQ_EXCHANGE_TYPE`    | `topic`    | Exchange type (direct, fanout, topic, headers)             |
+| `--rmq-exchange-durable`    | `RABBITMQ_EXCHANGE_DURABLE` | `false`    | Make exchange durable (survives broker restart)            |
+| `--rmq-workers`             | `RABBITMQ_WORKER_POOL`      | `auto`     | Number of RabbitMQ publisher workers (0=auto)              |
 
 ## Hardware-Aware Worker Pools
 
@@ -107,6 +127,7 @@ The application automatically optimizes worker pools based on available CPU core
 ### Default Sizing Formula
 
 - **PostgreSQL Workers**: `max(1, min(3, numCPU/2))`
+
   - 1 CPU → 1 worker
   - 4 CPUs → 2 workers
   - 8 CPUs → 3 workers (capped)
@@ -217,6 +238,7 @@ rabbitmqadmin declare binding source=pg_events destination=my_queue routing_key=
 ### Routing Keys
 
 The application uses the PostgreSQL event/channel name as the routing key. For example:
+
 - Event `notification-actions` → Routing key `notification-actions`
 - Event `device-actions` → Routing key `device-actions`
 
@@ -316,6 +338,7 @@ RABBITMQ_WORKER_POOL=20
 ```
 
 To increase buffer sizes, modify:
+
 - `core/rabbitmq/publisher.go:45` → `msgQueue` buffer (default: 1000)
 - `core/postgres/listener.go:57` → `notifChan` buffer (default: 500)
 
@@ -377,6 +400,7 @@ Error: failed to connect to PostgreSQL
 ```
 
 **Solution**: Check connection string format and PostgreSQL accessibility:
+
 ```bash
 psql "postgresql://postgres:postgres@localhost:5432/postgres"
 ```
@@ -388,6 +412,7 @@ Error: failed to connect to RabbitMQ
 ```
 
 **Solution**: Verify RabbitMQ is running and URL is correct:
+
 ```bash
 rabbitmqctl status
 ```
@@ -403,6 +428,7 @@ Error: pq: syntax error at or near "-"
 ### Messages Not Appearing in RabbitMQ
 
 **Check**:
+
 1. Queue is bound to exchange with correct routing key
 2. Exchange type matches routing strategy (use `topic` for wildcard routing)
 3. PostgreSQL notifications are actually firing (test with `pg_notify()`)
